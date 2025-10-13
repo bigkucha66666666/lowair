@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用户登录</title>
+  <style>
+    body{font-family:Arial, sans-serif;margin:40px;}
+    .card{max-width:420px;margin:auto;border:1px solid #e5e5e5;border-radius:8px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    .row{margin-bottom:12px}
+    label{display:block;margin-bottom:6px;font-weight:600}
+    input{width:100%;padding:10px;border:1px solid #ccc;border-radius:6px}
+    button{width:100%;padding:10px;border:none;border-radius:6px;background:#52c41a;color:#fff;font-weight:600;cursor:pointer}
+    .tip{margin-top:12px;text-align:center}
+    .msg{margin-top:12px;color:#1677ff}
+    .err{color:#d93025}
+  </style>
+  <script>
+    async function login(event){
+      event.preventDefault();
+      const userName = document.getElementById('userName').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const msg = document.getElementById('msg');
+      msg.textContent = '';
+      try{
+        const params = new URLSearchParams({userName, password});
+        const resp = await fetch('/user/login',{
+          method:'POST',
+          headers:{'Content-Type':'application/x-www-form-urlencoded'},
+          body: params.toString()
+        });
+        const data = await resp.json();
+        if(data.code===200){
+          msg.className = 'msg';
+          msg.textContent = '登录成功，正在跳转...';
+          setTimeout(()=>{ location.href = '/index.html'; }, 600);
+        }else{
+          msg.className = 'msg err';
+          msg.textContent = data.message || '登录失败';
+        }
+      }catch(e){
+        msg.className = 'msg err';
+        msg.textContent = e.message;
+      }
+    }
+  </script>
+ </head>
+ <body>
+  <div class="card">
+    <h2>登录</h2>
+    <form onsubmit="login(event)">
+      <div class="row">
+        <label for="userName">用户名</label>
+        <input id="userName" required>
+      </div>
+      <div class="row">
+        <label for="password">密码</label>
+        <input id="password" type="password" required>
+      </div>
+      <button type="submit">登录</button>
+      <div class="tip"><a href="/register.html">没有账号？去注册</a></div>
+      <div id="msg" class="msg"></div>
+    </form>
+  </div>
+ </body>
+ </html>
+
+

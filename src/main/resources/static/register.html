@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用户注册</title>
+  <style>
+    body{font-family:Arial, sans-serif;margin:40px;}
+    .card{max-width:420px;margin:auto;border:1px solid #e5e5e5;border-radius:8px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    .row{margin-bottom:12px}
+    label{display:block;margin-bottom:6px;font-weight:600}
+    input{width:100%;padding:10px;border:1px solid #ccc;border-radius:6px}
+    button{width:100%;padding:10px;border:none;border-radius:6px;background:#1677ff;color:#fff;font-weight:600;cursor:pointer}
+    .tip{margin-top:12px;text-align:center}
+    .msg{margin-top:12px;color:#1677ff}
+    .err{color:#d93025}
+  </style>
+  <script>
+    async function register(event){
+      event.preventDefault();
+      const userName = document.getElementById('userName').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const msg = document.getElementById('msg');
+      msg.textContent = '';
+      try{
+        const resp = await fetch('/user/register',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({userName, password, email})
+        });
+        const data = await resp.json();
+        if(data.code===200){
+          msg.className = 'msg';
+          msg.textContent = '注册成功，去登录页...';
+          setTimeout(()=>location.href='/login.html',1000);
+        }else{
+          msg.className = 'msg err';
+          msg.textContent = data.message || '注册失败';
+        }
+      }catch(e){
+        msg.className = 'msg err';
+        msg.textContent = e.message;
+      }
+    }
+  </script>
+ </head>
+ <body>
+  <div class="card">
+    <h2>注册</h2>
+    <form onsubmit="register(event)">
+      <div class="row">
+        <label for="userName">用户名</label>
+        <input id="userName" required>
+      </div>
+      <div class="row">
+        <label for="password">密码</label>
+        <input id="password" type="password" required>
+      </div>
+      <div class="row">
+        <label for="email">邮箱（可选）</label>
+        <input id="email" type="email">
+      </div>
+      <button type="submit">注册</button>
+      <div class="tip"><a href="/login.html">已有账号？去登录</a></div>
+      <div id="msg" class="msg"></div>
+    </form>
+  </div>
+ </body>
+ </html>
+
+

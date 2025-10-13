@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>管理主页面</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial, sans-serif;color:#1f2328;background:#f6f8fa}
+    .layout{display:flex;min-height:100vh}
+    .sider{width:240px;background:#0b1e3a;color:#fff;padding:16px 0}
+    .brand{padding:0 16px 12px 16px;font-weight:700;font-size:18px}
+    .menu{list-style:none;margin:0;padding:8px 0}
+    .menu li{padding:12px 20px;cursor:pointer;border-left:4px solid transparent}
+    .menu li.active{background:#102a56;border-left-color:#1677ff}
+    .menu li:hover{background:#0f284f}
+    .content{flex:1;padding:24px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:20px;max-width:880px}
+    h2{margin:0 0 16px 0;font-size:18px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    label{font-weight:600}
+    input, select{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:6px}
+    .row{display:flex;flex-direction:column;gap:6px}
+    .actions{margin-top:16px;display:flex;gap:10px}
+    button{padding:10px 14px;border:none;border-radius:6px;cursor:pointer;font-weight:600}
+    .primary{background:#1677ff;color:#fff}
+    .ghost{background:#eef2ff;color:#334155}
+    .msg{margin-top:10px;color:#0c7a43}
+    .err{color:#d93025}
+    .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+    .toolbar .links a{margin-left:12px;color:#1677ff;text-decoration:none}
+     #map {
+       width: 100%;
+       height: 420px;
+       border-radius: 8px;
+       overflow: hidden;
+     }
+    .leaflet-control-custom button {
+      background: white;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-radius: 4px;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+  </style>
+   <!-- Leaflet 地图（CDN） -->
+   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    async function fetchLoginUser(){
+      try{
+        const resp = await fetch('/user/me');
+        if(resp.ok){
+          const data = await resp.json();
+          if(data && data.code===200 && data.data){
+            const el = document.getElementById('loginUserName');
+            if(el){ el.textContent = data.data.userName || '已登录'; }
+            // 显示退出按钮，隐藏登录/注册
+            const logoutBtn = document.getElementById('logoutBtn');
+            const loginLink = document.getElementById('loginLink');
+            const regLink = document.getElementById('regLink');
+            if(logoutBtn) logoutBtn.style.display = 'inline-block';
+            if(loginLink) loginLink.style.display = 'none';
+            if(regLink) regLink.style.display = 'none';
+          } else {
+            // 未登录：隐藏退出按钮
+            const logoutBtn = document.getElementById('logoutBtn');
+            if(logoutBtn) logoutBtn.style.display = 'none';
+          }
+        }
+      }catch(_){ }
+    }
+
+    async function logout(){
+      try{
+        await fetch('/user/logout', { method:'POST' });
+      } finally {
+        location.href = '/login.html';
+      }
+    }
+    function switchSection(key){
+      document.querySelectorAll('.menu li').forEach(li=>li.classList.remove('active'));
+      const li = document.querySelector(`[data-menu="${key}"]`);
+      if(li) li.classList.add('active');
+      const basicSections = ['airzone','aircraft','climate','airfiled'];
+      const planSections = ['need','plan'];
+      if(key === 'basic'){
+        basicSections.forEach(k=>{ const el = document.querySelector(`[data-section="${k}"]`); if(el) el.style.display='block'; });
+        planSections.forEach(k=>{ const el = document.querySelector(`[data-section="${k}"]`); if(el) el.style.display='none'; });
+      }else if(key === 'plan'){
+        basicSections.forEach(k=>{ const el = document.querySelector(`[data-section="${k}"]`); if(el) el.style.display='none'; });
+        planSections.forEach(k=>{ const el = document.querySelector(`[data-section="${k}"]`); if(el) el.style.display='block'; });
+      }
+    }
+
+    async function postJSON(url, payload, msgEl){
+      msgEl.textContent = '';
+      msgEl.className = 'msg';
+      try{
+        const resp = await fetch(url,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if(data.code===200){
+          msgEl.textContent = '操作成功';
+        }else{
+          msgEl.className = 'msg err';
+          msgEl.textContent = data.message || '操作失败';
+        }
+      }catch(e){
+        msgEl.className = 'msg err';
+        msgEl.textContent = e.message;
+      }
+    }
+
+    // 提交各模块表单
+    function submitAirZone(e){
+      e.preventDefault();
+      const payload = {
+        zoneName: document.getElementById('az_zoneName').value.trim(),
+        zoneStock: document.getElementById('az_zoneStock').value.trim(),
+        granularity: parseInt(document.getElementById('az_granularity').value || '0'),
+        height: parseFloat(document.getElementById('az_height').value || '0')
+      };
+      postJSON('/airzone', payload, document.getElementById('az_msg'));
+    }
+
+    function submitAircraft(e){
+      e.preventDefault();
+      const payload = {
+        craft_type: document.getElementById('ac_type').value.trim(),
+        manufacture: document.getElementById('ac_manufacture').value.trim(),
+        wheelbase: parseFloat(document.getElementById('ac_wheelbase').value || '0'),
+        mileage: parseInt(document.getElementById('ac_mileage').value || '0'),
+        radius: parseFloat(document.getElementById('ac_radius').value || '0'),
+        fly_speed: parseFloat(document.getElementById('ac_fly_speed').value || '0'),
+        wind_speed: parseFloat(document.getElementById('ac_wind_speed').value || '0'),
+        lasttime: parseInt(document.getElementById('ac_lasttime').value || '0')
+      };
+      postJSON('/aircraft', payload, document.getElementById('ac_msg'));
+    }
+
+    function submitClimate(e){
+      e.preventDefault();
+      const payload = {
+        status: document.getElementById('cl_status').checked,
+        speed: parseFloat(document.getElementById('cl_speed').value || '0'),
+        temperature: parseFloat(document.getElementById('cl_temperature').value || '0'),
+        wet: parseFloat(document.getElementById('cl_wet').value || '0')
+      };
+      postJSON('/climate', payload, document.getElementById('cl_msg'));
+    }
+
+    function submitAirfiled(e){
+      e.preventDefault();
+      const payload = {
+        Name: document.getElementById('af_name').value.trim(),
+        Status: document.getElementById('af_status').value.trim(),
+        Typr: document.getElementById('af_type').value.trim(),
+        Stock: parseInt(document.getElementById('af_stock').value || '0')
+      };
+      postJSON('/airfiled', payload, document.getElementById('af_msg'));
+    }
+
+    function submitNeed(e){
+      e.preventDefault();
+      const payload = {
+        Name: document.getElementById('nd_name').value.trim(),
+        airZone: document.getElementById('nd_airZone').value.trim(),
+        status: document.getElementById('nd_status').value.trim(),
+        up_time: parseInt(document.getElementById('nd_up_time').value || '0'),
+        height: document.getElementById('nd_height').value.trim()
+      };
+      postJSON('/need', payload, document.getElementById('nd_msg'));
+    }
+
+    function submitPlan(e){
+      e.preventDefault();
+      const payload = {
+        plan_name: document.getElementById('pl_plan_name').value.trim(),
+        ues_zone: document.getElementById('pl_ues_zone').value.trim(),
+        algorithm: document.getElementById('pl_algorithm').value.trim(),
+        plan_climate: document.getElementById('pl_plan_climate').value.trim(),
+        need_count: parseInt(document.getElementById('pl_need_count').value || '0'),
+        plan_status: document.getElementById('pl_plan_status').value.trim()
+      };
+      postJSON('/plan', payload, document.getElementById('pl_msg'));
+    }
+
+    window.addEventListener('DOMContentLoaded', ()=>{ switchSection('basic'); fetchLoginUser(); });
+
+    // 初始化地图
+     let map = null;
+     let userMarker = null;
+     let clickMarker = null;
+     let currentLocation = null;
+
+     function initMap(){
+       if(!window.L){ return; }
+       map = L.map('map').setView([39.9042, 116.4074], 10);
+       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+         maxZoom: 19,
+         attribution: '&copy; OpenStreetMap contributors'
+       }).addTo(map);
+
+       // 添加定位按钮
+       const locateBtn = L.control({position: 'topright'});
+       locateBtn.onAdd = function(map) {
+         const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+         div.innerHTML = '<button title="定位到当前位置">📍</button>';
+         div.onclick = function() { locateUser(); };
+         return div;
+       };
+       locateBtn.addTo(map);
+
+       // 点击地图添加标记
+       map.on('click', function(e){
+         const latlng = e.latlng;
+         if(clickMarker){
+           map.removeLayer(clickMarker);
+         }
+         clickMarker = L.marker([latlng.lat, latlng.lng]).addTo(map)
+                 .bindPopup('点击位置<br>纬度: ' + latlng.lat.toFixed(6) + '<br>经度: ' + latlng.lng.toFixed(6))
+                 .openPopup();
+       });
+
+       // 尝试获取用户位置
+       locateUser();
+     }
+
+     function locateUser(){
+       if(!navigator.geolocation){
+         alert('浏览器不支持地理位置功能');
+         return;
+       }
+
+       navigator.geolocation.getCurrentPosition(
+         function(position){
+           const lat = position.coords.latitude;
+           const lng = position.coords.longitude;
+           currentLocation = {lat, lng};
+
+           if(map){
+             map.setView([lat, lng], 15);
+
+             if(userMarker){
+               map.removeLayer(userMarker);
+             }
+
+             // 获取地址信息
+             getAddressFromCoords(lat, lng, function(address){
+               userMarker = L.marker([lat, lng]).addTo(map)
+                 .bindPopup('当前位置<br>' + address)
+                 .openPopup();
+             });
+           }
+         },
+         function(error){
+           console.log('定位失败:', error.message);
+           if(map && !userMarker){
+             L.marker([39.9042, 116.4074]).addTo(map)
+               .bindPopup('默认位置（北京）')
+               .openPopup();
+           }
+         },
+         {
+           enableHighAccuracy: true,
+           timeout: 10000,
+           maximumAge: 60000
+         }
+       );
+     }
+
+     // 根据坐标获取地址信息
+     function getAddressFromCoords(lat, lng, callback){
+       fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
+         .then(response => response.json())
+         .then(data => {
+           let address = '未知位置';
+           if(data && data.display_name){
+             // 提取主要地址信息
+             const parts = data.display_name.split(',');
+             if(parts.length >= 3){
+               address = parts.slice(0, 3).join(', ');
+             } else {
+               address = data.display_name;
+             }
+           }
+           callback(address);
+         })
+         .catch(error => {
+           console.log('地址解析失败:', error);
+           callback('纬度: ' + lat.toFixed(6) + ', 经度: ' + lng.toFixed(6));
+         });
+     }
+
+    window.addEventListener('load', ()=>{ try{ initMap(); }catch(e){} });
+  </script>
+ </head>
+ <body>
+  <div class="layout">
+    <aside class="sider">
+      <div class="brand">低空管理系统</div>
+      <ul class="menu">
+        <li data-menu="basic" class="active" onclick="switchSection('basic')">基础管理</li>
+        <li data-menu="plan" onclick="switchSection('plan')">飞行计划编制</li>
+      </ul>
+    </aside>
+    <main class="content">
+      <div class="toolbar">
+        <h1 style="margin:0;font-size:20px">管理主页面</h1>
+        <div class="links">
+          <span id="loginUserName" style="margin-right:12px;color:#334155"></span>
+          <a id="loginLink" href="/login.html">登录</a>
+          <a id="regLink" href="/register.html">注册</a>
+          <button id="logoutBtn" class="ghost" style="display:none" onclick="logout()">退出登录</button>
+        </div>
+      </div>
+
+      <!-- 地图展示 -->
+      <section class="card" style="margin-bottom:16px">
+        <h2>地图</h2>
+         <div id="map"></div>
+      </section>
+
+      <!-- 空域管理 -->
+      <section class="card" data-section="airzone" style="display:none">
+        <h2>空域管理（AirZone）</h2>
+        <form onsubmit="submitAirZone(event)">
+          <div class="grid">
+            <div class="row"><label>名称</label><input id="az_zoneName" placeholder="zoneName"></div>
+            <div class="row"><label>存储标识</label><input id="az_zoneStock" placeholder="zoneStock"></div>
+            <div class="row"><label>粒度（整数）</label><input id="az_granularity" type="number" step="1" placeholder="granularity"></div>
+            <div class="row"><label>高度（米）</label><input id="az_height" type="number" step="0.01" placeholder="height"></div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit">新增空域</button>
+            <button class="ghost" type="reset">重置</button>
+          </div>
+          <div id="az_msg" class="msg"></div>
+        </form>
+      </section>
+
+      <!-- 飞行器管理 -->
+      <section class="card" data-section="aircraft" style="display:none">
+        <h2>飞行器管理（Aircraft）</h2>
+        <form onsubmit="submitAircraft(event)">
+          <div class="grid">
+            <div class="row"><label>类型</label><input id="ac_type" placeholder="type (craft_type)"></div>
+            <div class="row"><label>制造商</label><input id="ac_manufacture" placeholder="manufacture"></div>
+            <div class="row"><label>轴距</label><input id="ac_wheelbase" type="number" step="0.01" placeholder="wheelbase"></div>
+            <div class="row"><label>里程</label><input id="ac_mileage" type="number" step="1" placeholder="mileage"></div>
+            <div class="row"><label>半径</label><input id="ac_radius" type="number" step="0.01" placeholder="radius"></div>
+            <div class="row"><label>飞行速度</label><input id="ac_fly_speed" type="number" step="0.01" placeholder="fly_speed"></div>
+            <div class="row"><label>抗风速度</label><input id="ac_wind_speed" type="number" step="0.01" placeholder="wind_speed"></div>
+            <div class="row"><label>续航时间（分钟）</label><input id="ac_lasttime" type="number" step="1" placeholder="lasttime"></div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit">新增飞行器</button>
+            <button class="ghost" type="reset">重置</button>
+          </div>
+          <div id="ac_msg" class="msg"></div>
+        </form>
+      </section>
+
+      <!-- 天气管理 -->
+      <section class="card" data-section="climate" style="display:none">
+        <h2>天气管理（Climate）</h2>
+        <form onsubmit="submitClimate(event)">
+          <div class="grid">
+            <div class="row"><label>状态（启用）</label><input id="cl_status" type="checkbox"></div>
+            <div class="row"><label>风速</label><input id="cl_speed" type="number" step="0.01" placeholder="speed"></div>
+            <div class="row"><label>温度</label><input id="cl_temperature" type="number" step="0.01" placeholder="temperature"></div>
+            <div class="row"><label>湿度</label><input id="cl_wet" type="number" step="0.01" placeholder="wet"></div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit">新增天气记录</button>
+            <button class="ghost" type="reset">重置</button>
+          </div>
+          <div id="cl_msg" class="msg"></div>
+        </form>
+      </section>
+
+      <!-- 降落场管理 -->
+      <section class="card" data-section="airfiled" style="display:none">
+        <h2>降落场管理（Airfiled）</h2>
+        <form onsubmit="submitAirfiled(event)">
+          <div class="grid">
+            <div class="row"><label>名称</label><input id="af_name" placeholder="af_name (Name)"></div>
+            <div class="row"><label>状态</label><input id="af_status" placeholder="status (Status)"></div>
+            <div class="row"><label>类型</label><input id="af_type" placeholder="type (Typr)"></div>
+            <div class="row"><label>库存</label><input id="af_stock" type="number" step="1" placeholder="stock (Stock)"></div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit">新增降落场</button>
+            <button class="ghost" type="reset">重置</button>
+          </div>
+          <div id="af_msg" class="msg"></div>
+        </form>
+      </section>
+
+      <!-- 需求管理 -->
+      <section class="card" data-section="need" style="display:none">
+        <h2>需求管理（Need）</h2>
+        <form onsubmit="submitNeed(event)">
+          <div class="grid">
+            <div class="row"><label>需求名称</label><input id="nd_name" placeholder="Name"></div>
+            <div class="row"><label>空域</label><input id="nd_airZone" placeholder="airZone"></div>
+            <div class="row"><label>状态</label><input id="nd_status" placeholder="status"></div>
+            <div class="row"><label>起飞时间（整数）</label><input id="nd_up_time" type="number" step="1" placeholder="up_time"></div>
+            <div class="row"><label>高度</label><input id="nd_height" placeholder="height"></div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit">新增需求</button>
+            <button class="ghost" type="reset">重置</button>
+          </div>
+          <div id="nd_msg" class="msg"></div>
+        </form>
+      </section>
+
+      <!-- 计划管理 -->
+      <section class="card" data-section="plan" style="display:none">
+        <h2>计划管理（Plan）</h2>
+        <form onsubmit="submitPlan(event)">
+          <div class="grid">
+            <div class="row"><label>计划名称</label><input id="pl_plan_name" placeholder="plan_name"></div>
+            <div class="row"><label>使用空域</label><input id="pl_ues_zone" placeholder="ues_zone"></div>
+            <div class="row"><label>算法</label><input id="pl_algorithm" placeholder="algorithm"></div>
+            <div class="row"><label>计划气候</label><input id="pl_plan_climate" placeholder="plan_climate"></div>
+            <div class="row"><label>需求数量</label><input id="pl_need_count" type="number" step="1" placeholder="need_count"></div>
+            <div class="row"><label>计划状态</label><input id="pl_plan_status" placeholder="plan_status"></div>
+          </div>
+          <div class="actions">
+            <button class="primary" type="submit">新增计划</button>
+            <button class="ghost" type="reset">重置</button>
+          </div>
+          <div id="pl_msg" class="msg"></div>
+        </form>
+      </section>
+
+    </main>
+  </div>
+ </body>
+ </html>
+
+
